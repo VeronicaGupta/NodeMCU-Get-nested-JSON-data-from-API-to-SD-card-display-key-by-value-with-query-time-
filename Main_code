@@ -1,0 +1,209 @@
+/*The circuit: SD card attached to SPI bus of NodeMCU Module*/
+
+#include <Arduino.h>
+#include <Arduino_JSON.h>
+
+#include <ESP8266WiFi.h>
+#include <ESP8266WiFiMulti.h>
+
+#include <ESP8266HTTPClient.h>
+
+#include <WiFiClient.h>
+
+#include <SPI.h>
+#include <SD.h>
+
+ESP8266WiFiMulti WiFiMulti;
+
+const char* ssid = "ssid"; 
+const char* password = "password";
+const String ip = "http://demo4657392.mockable.io/list-tag-ids";
+
+myFile = SD.open("test.txt", FILE_WRITE);
+  
+void setup() 
+{
+
+  Serial.begin(9600);//Serial.setDebugOutput(true);
+
+  Serial.println();
+  Serial.println();
+  Serial.println();
+  delay(1500);
+  
+  for (uint8_t t = 4; t > 0; t--) 
+  {
+    Serial.printf("WAIT %d\n", t);
+    Serial.flush();
+    delay(1000);
+  }
+
+  WiFi.mode(WIFI_STA);
+  WiFiMulti.addAP(ssid, password);
+
+  if ((WiFiMulti.run() == WL_CONNECTED)) // wait for WiFi connection
+  {
+    Serial.print("\nCode begin");
+    Serial.print("\nConnected to the WiFi network\n");
+  }
+   else 
+  {
+    Serial.printf("Status failed");
+  }
+  
+}
+
+void loop() {
+  if ((WiFiMulti.run() == WL_CONNECTED)) // wait for WiFi connection
+  {    
+    Serial.println("\n=====");
+    unsigned long start = micros();
+    
+    // Call to your function
+    demoParse();
+    // Compute the time it took
+    
+    unsigned long end = micros();
+    unsigned long delta = (end - start)/1000;
+    Serial.println("\nTime for the query: " + (String) delta + " ms\n"); // time for the query
+    Serial.println("=====\n");
+  }
+   else 
+  {
+    Serial.printf("Status failed");
+  }
+    
+  delay(10000);
+}
+
+void demoParse() 
+{
+  if ((WiFiMulti.run() == WL_CONNECTED)) // wait for WiFi connection
+  {
+    Serial.print("Loop...\n");
+    WiFiClient client;
+    HTTPClient http;
+    delay(200);
+    if (http.begin(client, ip)) // HTTP
+    {        
+      delay(500);
+      int httpCode = http.GET(); // start connection and send HTTP header
+
+      if (httpCode > 0) // httpCode will be negative on error
+      {
+        Serial.printf("\nStatus code: %d", httpCode); // HTTP header has been send and Server response header has been handled
+
+        if (httpCode == HTTP_CODE_OK || httpCode == HTTP_CODE_MOVED_PERMANENTLY) // file found at server
+        {
+          Serial.print("\nIP Address: ");
+          Serial.println(WiFi.localIP());
+          
+          int len = http.getSize(); // get lenght of document (is -1 when Server sends no Content-Length header)
+          uint8_t buff[128] = { 0 }; // create buffer for read
+  
+          #if 0
+          Serial.println(http.getString()); // with API- for less data
+          #else
+          WiFiClient * stream = &client; // get tcp stream- for large files like in the API above
+          
+          // read all data from server
+          while (http.connected() && (len > 0 || len == -1)) 
+          {
+            int c = stream->readBytes(buff, std::min((size_t)len, sizeof(buff))); // read up to 128 byte
+            Serial.printf("readBytes: %d\n", c);
+            
+            if (!c) 
+            {
+              Serial.println("read timeout");
+            }
+            
+            if (myFile) // write it to file
+            {
+             myFile.write(buff, c);
+            } 
+            else 
+            {
+            Serial.println("error opening test.txt"); // if the file didn't open, print an error
+            }
+ 
+            if (len > 0) 
+            {
+             len -= c;
+            }
+          }
+          myFile.close(); // close the file:
+          Serial.println("done.");
+          #endif
+          
+          Serial.printf("\nFile end!\n");  
+
+          myFile = SD.open("test.txt"); // re-open the file for reading
+          if (myFile) {
+            Serial.println("test.txt:");
+            
+            while (myFile.available()) // read from the file until there's nothing else in it
+            {
+              const char* input[] = myFile.read();
+            }
+            // close the file:
+            myFile.close();
+          } 
+          else 
+          {
+            Serial.println("error opening test.txt"); // if the file didn't open, print an error
+          }
+         
+          Serial.println("\nParsing...");
+        
+          JSONVar myObject = JSON.parse(input);
+        
+          if (JSON.typeof(myObject) == "undefined") // JSON.typeof(jsonVar) can be used to get the type of the var
+          {
+            Serial.println("Parsing input failed!");
+            return;
+          }
+        
+          Serial.print("JSON.typeof(myObject) = ");
+          Serial.println(JSON.typeof(myObject)); // prints: object
+        
+          // myObject.hasOwnProperty(key) checks if the object contains an entry for key
+        
+          if (myObject.hasOwnProperty("student_id")) 
+          {
+            
+            Serial.print("myObject[\"student_id\"] = "); Serial.println(myObject["student_id"]);
+
+            Serial.print("Enter the value of the STUDENT_ID for key : ");
+            String value = Serial.read();
+            
+            for(int i=0; i<myObject["student_id"].length(); i++) #finding the key for the entered value
+            {
+              String index = (String) (i+1);
+              
+              if(myObject["student_id"][i][index].equals(value))
+              {
+                Serial.print(index + " : ");
+                Serial.print(myObject["student_id"][i][index]);
+              }
+              
+              Serial.println();
+              delay(100);
+            }       
+            //Serial.print("myObject = "); Serial.println(myObject); //JSON vars can be printed using print or println
+            Serial.println();
+           }
+          }
+        } 
+        else 
+        {
+          Serial.printf("Status failed, error: %s\n", http.errorToString(httpCode).c_str());
+        }
+  
+        http.end(); 
+      } 
+      else 
+      {
+        Serial.printf("Connection lost...\n");
+      }
+  }
+}
